@@ -328,6 +328,7 @@ Start:
     ; palettes
     ld a, %11100100
     ld [rBGP], a
+    ld a, %11110100
     ld [rOBP0], a
     
     ld a, 0
@@ -391,6 +392,11 @@ Start:
     ld bc, $800
     call CopyData
     
+    ld hl, Sprites
+    ld de, $8000
+    ld bc, $800
+    call CopyData
+    
         
     call EnableLCD
     xor a
@@ -442,6 +448,22 @@ AddScore:
     ld [H_SCORE], a
     ld a, h
     ld [H_SCORE+1], a
+    ld a, [H_HIGHSCORE]
+    ld e, a
+    ld a, [H_HIGHSCORE+1]
+    ld d, a
+    cp h
+    jr z, .maybe
+    jr nc, .nothi
+.maybe
+    ld a, e
+    cp l
+    jr nc, .nothi
+    ld a, l
+    ld [H_HIGHSCORE], a
+    ld a, h
+    ld [H_HIGHSCORE+1], a
+.nothi
     pop de
     pop hl
     ret
@@ -577,6 +599,7 @@ UpdateTilemap:
     ld hl, GridTilemap
     decoord 1, 0
     ld bc, 320
+    di
     call CopyData
     
     ld bc, $0000
@@ -679,7 +702,7 @@ UpdateTilemap:
     inc b
     ld a, b
     cp 16
-    ret z
+    jr z, .ret
     and %00000011
     jr nz, .loop
     push bc
@@ -694,8 +717,13 @@ UpdateTilemap:
     inc hl
     inc hl
     jr .next
+.ret
+    ei
+    ret
 
 GameOver:
+    ld a, %10010100
+    ld [rBGP], a
     hlcoord 0, $c
     ld a, $f4
     ld b, $fa
@@ -893,7 +921,7 @@ MoveGrid:
     ; etc
     ld hl, W_2048GRID
     call ClearMergeBits
-    call UpdateTilemapScore
+    ;call UpdateTilemapScore ; do this after an animation
     call AddNewTile
     call CanMoveGrid
     call z, GameOver
@@ -1064,6 +1092,8 @@ InitGame:
     ;ld [W_2048GRID+5], a
     ;ld [W_2048GRID+10], a
     
+    ld a, %11100100
+    ld [rBGP], a
     call UpdateTilemap
     call UpdateTilemapScore
     hlcoord 0, 1
@@ -1095,6 +1125,7 @@ InitGame:
     jr nz, .gameloop
     xor a
     ld [H_ANIMATE], a
+    call UpdateTilemapScore
     jr .gameloop
 .input
     ld hl, H_JOYNEW
@@ -1117,7 +1148,8 @@ InitGame:
 
 Tiles:
     INCBIN "gfx/tiles.2bpp"
-TilesEnd
+Sprites:
+    INCBIN "gfx/sprites.2bpp"
 
 
 
