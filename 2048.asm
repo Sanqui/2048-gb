@@ -783,21 +783,46 @@ GameOver:
     ld [H_GAMEOVER], a
     ld a, %10010100
     ld [rBGP], a
-    ;hlcoord 0, $c
-    ;ld a, $f4
-    ;ld b, $fa
-    ;call WriteDataInc
-    ;WriteDataInc
     xor a
     ld b, 10
     ld de, $4034
     ld hl, W_OAM
     call WriteSpriteRow
-    ld a, $20
+    ld a, $30
     ld b, 6
     ld de, $6444
     ld hl, W_OAM+4*10
     call WriteSpriteRow
+    ret
+
+YouWin:
+    ld a, 1
+    ld [H_GAMEOVER], a
+    ld a, %10010100
+    ld [rBGP], a
+    ld a, $14
+    ld b, 9
+    ld de, $4038
+    ld hl, W_OAM
+    call WriteSpriteRow
+    ld a, $30
+    ld b, 6
+    ld de, $6444
+    ld hl, W_OAM+4*9
+    call WriteSpriteRow
+    ret
+
+Has2048Tile:
+    ld hl, W_2048GRID
+    ld b, 16
+.loop
+    ld a, [hli]
+    cp 11
+    ret z
+    dec b
+    jr nz, .loop
+    ld a, 1
+    and a
     ret
 
 ClearMergeBits:
@@ -995,6 +1020,8 @@ MoveGrid:
     call AddNewTile
     call CanMoveGrid
     call z, GameOver
+    call Has2048Tile
+    call z, YouWin
     xor a ; else we'll hit other directional keys
     ret
 
