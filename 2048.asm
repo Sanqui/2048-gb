@@ -47,6 +47,7 @@ VBlankHandler:
     push de
     push hl
     call CopyTilemap
+    call $FF80
     call ReadJoypadRegister
     ld hl, H_TIMER
     inc [hl]
@@ -250,6 +251,37 @@ ModuloC: ; modulo c
     sub a, c
     jr .loop
 
+WriteSpriteRow:
+    ; a = tile id
+    ; b = amount
+    ; de = xy
+    ; hl = target
+.loop
+    ld [hl], d
+    inc hl
+    ld [hl], e
+    ld c, a
+    ld a, e
+    add 8
+    ld e, a
+    ld a, c
+    inc hl
+    ld [hli], a
+    inc a
+    inc a
+    ld [hl], 0
+    inc hl
+    dec b
+    jr nz, .loop
+    ret
+
+ClearOAM:
+    xor a
+    ld hl, W_OAM
+    ld b, 4*$28
+    call FillMemory
+    ret
+
 ; a standard function:
 ; this function directly reads the joypad I/O register
 ; it reads many times in order to give the joypad a chance to stabilize
@@ -322,20 +354,43 @@ WaitForKey:
     jr z, .loop
     ret
 
+; copies DMA routine to HRAM. By GB specifications, all DMA needs to be done in HRAM (no other memory section is available during DMA)
+WriteDMACodeToHRAM:
+	ld c, $80
+	ld b, $a
+	ld hl, DMARoutine
+.copyLoop
+	ld a, [hli]
+	ld [$ff00+c], a
+	inc c
+	dec b
+	jr nz, .copyLoop
+	ret
+
+; this routine is copied to HRAM and executed there on every VBlank
+DMARoutine:
+	ld a, W_OAM >> 8
+	ld [$ff00+$46], a   ; start DMA
+	ld a, $28
+.waitLoop               ; wait for DMA to finish
+	dec a
+	jr nz, .waitLoop
+	ret
+
 Start:
     di
     
     ; palettes
     ld a, %11100100
     ld [rBGP], a
-    ld a, %11110100
+    ld a, %11010000
     ld [rOBP0], a
     
     ld a, 0
     ld [rSCX], a
     ld [rSCY], a
     
-    ld a, %11000001
+    ld a, %11000111
     ld [rLCDC], a
     
     ei
@@ -372,6 +427,8 @@ Start:
     
     pop af
     ld [H_RNG1], a
+    
+    call WriteDMACodeToHRAM
     
     ; set up vblank copy offsets
     ld a, $98
@@ -722,12 +779,25 @@ UpdateTilemap:
     ret
 
 GameOver:
+    ld a, 1
+    ld [H_GAMEOVER], a
     ld a, %10010100
     ld [rBGP], a
-    hlcoord 0, $c
-    ld a, $f4
-    ld b, $fa
-    call WriteDataInc
+    ;hlcoord 0, $c
+    ;ld a, $f4
+    ;ld b, $fa
+    ;call WriteDataInc
+    ;WriteDataInc
+    xor a
+    ld b, 10
+    ld de, $4034
+    ld hl, W_OAM
+    call WriteSpriteRow
+    ld a, $20
+    ld b, 6
+    ld de, $6444
+    ld hl, W_OAM+4*10
+    call WriteSpriteRow
     ret
 
 ClearMergeBits:
@@ -1082,9 +1152,11 @@ InitGame:
     xor a
     ld [H_SCORE], a
     ld [H_SCORE+1], a
+    ld [H_GAMEOVER], a
     ld hl, W_2048GRID
     ld b, 16
     call FillMemory
+    call ClearOAM
     
     call AddNewTile
     call AddNewTile
@@ -1128,6 +1200,9 @@ InitGame:
     call UpdateTilemapScore
     jr .gameloop
 .input
+    ld a, [H_GAMEOVER]
+    and a
+    jr nz, .gameover
     ld hl, H_JOYNEW
     ld a, [hl]
     ld [hl], 0
@@ -1144,6 +1219,10 @@ InitGame:
     call nz, MoveRight
     call UpdateTilemap
     jr .gameloop
+.gameover
+    call UpdateTilemap
+    call WaitForKey
+    jp InitGame
     
 
 Tiles:

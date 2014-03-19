@@ -63,6 +63,7 @@ rIE EQU $ffff ; Interrupt Enable (R/W)
 
 ; macro for easily selecting coordinates on screen
 W_TILEMAP EQU $C000
+W_OAM EQU $C200
 
 ;\1 = X
 ;\2 = Y
@@ -108,6 +109,7 @@ H_ANIMDIR EQU $FFA9
 
 H_SCORE EQU $FFB0
 H_HIGHSCORE EQU $FFB2
+H_GAMEOVER EQU $FFB4
 
 H_TIMER EQU $FFF0
 H_RNG1 EQU $FFF1
