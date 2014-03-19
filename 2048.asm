@@ -1195,10 +1195,10 @@ InitGame:
     ld [rBGP], a
     call UpdateTilemap
     call UpdateTilemapScore
-    hlcoord 0, 1
-    ld a, $04
-    ld b, $0e
-    call WriteDataInc
+    ;hlcoord 0, 1
+    ;ld a, $04
+    ;ld b, $0e
+    ;call WriteDataInc
     
 .gameloop
     halt
