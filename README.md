@@ -1,5 +1,6 @@
 A gameboy port of the game 2048.
 
+![screenshot](http://sanqui.rustedlogic.net/etc/2048-gb-title.png)
 ![screenshot](http://sanqui.rustedlogic.net/etc/2048-gb-screenshot.png)
 
 You can play the original here: http://gabrielecirulli.github.io/2048/

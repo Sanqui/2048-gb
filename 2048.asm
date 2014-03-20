@@ -281,6 +281,18 @@ ClearOAM:
     ld b, 4*$28
     call FillMemory
     ret
+    
+ClearTilemap:
+    ld hl, W_TILEMAP
+    ld bc, 20*18
+.loop
+    xor a
+    ld [hli], a
+    dec bc
+    ld a, b
+    or c
+    jr nz, .loop
+    ret
 
 ; a standard function:
 ; this function directly reads the joypad I/O register
@@ -438,7 +450,36 @@ Start:
     ld a, $8
     ld [H_VCOPY_ROWS], a
     
-    ; set up graphics
+    ; set up ingame graphics
+    ld hl, Title
+    ld de, $9000
+    ld bc, $800
+    call CopyData
+    ld hl, Title+$800
+    ld de, $8800
+    ld bc, $100
+    call CopyData
+    
+    ld hl, TitleTilemap
+    ld de, W_TILEMAP
+    ld bc, TitleTilemapEnd-TitleTilemap
+    call CopyData
+        
+    call EnableLCD
+    xor a
+    ld [$ffff], a
+    ld a, %00000001
+    ld [$ffff], a
+    ei
+    
+    call WaitForKey
+    call ClearTilemap
+    halt
+    halt
+    halt
+    
+    call DisableLCD
+    ; set up ingame graphics
     ld hl, Tiles
     ld de, $9000
     ld bc, $800
@@ -453,15 +494,28 @@ Start:
     ld de, $8000
     ld bc, $800
     call CopyData
-    
-        
     call EnableLCD
-    xor a
-    ld [$ffff], a
-    ld a, %00000001
-    ld [$ffff], a
-    ei
     jp InitGame
+
+TitleTilemap:
+    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    db $00, $00, $0f, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $00, $00, $00
+    db $00, $00, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $1a, $1b, $1c, $1d, $1e, $1f, $00, $00
+    db $00, $00, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $2a, $2b, $2c, $2d, $2e, $2f, $00, $00
+    db $00, $00, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $3a, $3b, $3c, $3d, $3e, $3f, $00, $00
+    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $7e, $7f, $00, $00, $00, $00, $00
+    db $00, $00, $40, $41, $42, $43, $44, $45, $46, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    db $00, $00, $00, $00, $47, $48, $49, $4a, $4b, $4c, $4d, $4e, $4f, $50, $51, $52, $53, $54, $00, $00
+    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    db $00, $00, $55, $56, $57, $58, $59, $5a, $5b, $5c, $5d, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    db $00, $00, $00, $00, $5e, $5f, $60, $61, $62, $63, $64, $65, $66, $67, $68, $00, $00, $00, $00, $00
+    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    db $00, $00, $69, $6a, $6b, $6c, $6d, $6e, $6f, $70, $71, $72, $73, $74, $00, $00, $00, $00, $00, $00
+    db $00, $00, $00, $00, $75, $76, $77, $78, $79, $7a, $7b, $7c, $7d, $00, $00, $00, $00, $00, $00, $00
+    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    db $00, $00, $00, $00, $00, $00, $00, $80, $81, $82, $83, $84, $85, $00, $00, $00, $00, $00, $00, $00
+TitleTilemapEnd
 
 ModuloB:
 .loop
@@ -1256,6 +1310,8 @@ Tiles:
     INCBIN "gfx/tiles.2bpp"
 Sprites:
     INCBIN "gfx/sprites.2bpp"
+Title:
+    INCBIN "gfx/title.2bpp"
 
 
 
