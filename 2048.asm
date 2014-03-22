@@ -46,7 +46,14 @@ VBlankHandler:
     push bc
     push de
     push hl
+    ld a, [H_FAST_VCOPY]
+    and a
+    jr z, .regular
+    call FastVblank
+    jr .copied
+.regular
     call CopyTilemap
+.copied
     call $FF80
     call ReadJoypadRegister
     ld hl, H_TIMER
@@ -181,6 +188,63 @@ CopyTilemap: ; We can copy just 8 lines per vblank.
     ld [H_VCOPY_TIMES], a
     ld a, $8
     ld [H_VCOPY_ROWS], a
+    ret
+
+FastVblank:
+    ld [W_SPTMP], sp
+;    ld a, [H_FAST_PART]
+;    and a
+;    jr nz, .bottom
+;.top
+    ld sp, W_TILEMAP+22
+    ld hl, $9800 + $22
+;    jr .set
+;.bottom
+;    ld sp, W_TILEMAP+82
+;    ld hl, $9800 + $82
+;.set
+    ld b, 6
+.loop
+rept 2
+    popdetohli 8
+    ld de, $10
+    add hl, de
+    add sp, $4
+endr
+    dec b
+    jr nz, .loop
+; squeeze in one last row
+    popdetohli 8
+    ld de, $10
+    add hl, de
+    add sp, $4
+;...and a bit
+    popdetohli 2
+; and now wait patiently for blank
+    waithblank
+    ; go!
+    popdetohli 6
+    ld de, $10
+    add hl, de
+    add sp, $4
+    
+    waithblank
+    popdetohli 6
+    
+    waithblank
+    popdetohli 2
+    ld de, $10
+    add hl, de
+    add sp, $4
+    popdetohli 4
+    waithblank
+    popdetohli 4
+    
+    ld a, [W_SPTMP]
+    ld l, a
+    ld a, [W_SPTMP+1]
+    ld h, a
+    ld sp, hl
     ret
 
 DisableLCD: ; $0061
@@ -690,10 +754,45 @@ GridTilemap:
     db $00, $00, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $00, $00
     db $00, $00, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $00, $00 
 
+DetermineFastVcopyPart: ; XXX unused, remove
+    ld hl, W_ANIMFRAMES
+    ld a, [H_ANIMFRAME]
+    swap a
+    add 12
+    ld l, a
+    ; if anything in the bottom row is moving, we need to update it.
+rept 4
+    ld a, [hli]
+    bit 7, a
+    jr nz, .bottom
+endr
+    ; if we're moving down and anything in the third row is moving, we need 
+    ; to update it.
+    ld a, [H_ANIMDIR]
+    and a
+    jr nz, .top
+    ld hl, W_ANIMFRAMES
+    ld a, [H_ANIMFRAME]
+    swap a
+    add 8
+    ld l, a
+rept 4
+    ld a, [hli]
+    bit 7, a
+    jr nz, .bottom
+endr
+.top
+    xor a
+    ;ld [H_FAST_PART], a
+    ret
+.bottom
+    ld a, 1
+    ;ld [H_FAST_PART], a
+    ret
+
 TilemapAddValues:
 ; down up left right
     dw 20, -20, -1, 1
-
 
 UpdateTilemap:
     ld a, [H_ANIMDIR]
@@ -1064,6 +1163,7 @@ MoveGrid:
     ld [H_ANIMDIR], a
     ld a, 1
     ld [H_ANIMATE], a
+    ld [H_FAST_VCOPY], a
     xor a
     ld [H_ANIMSUB], a
     ld [H_ANIMFRAME], a
@@ -1278,6 +1378,7 @@ InitGame:
     jr nz, .gameloop
     xor a
     ld [H_ANIMATE], a
+    ld [H_FAST_VCOPY], a
     call UpdateTilemapScore
     jr .gameloop
 .input

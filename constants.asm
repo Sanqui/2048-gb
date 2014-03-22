@@ -80,12 +80,33 @@ hlcoord: MACRO
     FuncCoord \2, \1
     ld hl, Coord
     ENDM
+
+; fast copy macros
+waithblank: MACRO
+.wait\@
+    ld a, [rSTAT]
+    and %00000011
+    and a
+    jr nz, .wait\@
+    ENDM
     
+popdetohli: MACRO
+rept \1
+    pop de
+    ld a, e
+    ld [hli], a
+    ld a, d
+    ld [hli], a
+endr
+    ENDM
+
 ; game stuff
 
 W_2048GRID EQU $C800 ; MUST be aligned to 00
 W_ANIMFRAME EQU $C880
 W_ANIMFRAMES EQU $C900
+
+W_SPTMP EQU $CFFE
 
 ; Other variables
 
@@ -95,6 +116,8 @@ H_VCOPY_H EQU $FF92
 H_VCOPY_L EQU $FF93
 H_VCOPY_TIMES EQU $FF94
 H_VCOPY_ROWS EQU $FF95
+H_FAST_VCOPY EQU $FF96
+;H_FAST_PART EQU $FF97
 
 H_CURDIR EQU $FFA0
 H_CURADD EQU $FFA1
