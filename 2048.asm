@@ -271,6 +271,52 @@ EnableLCD:
 	ld [$ff40],a
 	ret
 
+FadeToWhite:
+    lda [rBGP], %11100100
+    halt
+    halt
+    halt
+    halt
+FateToWhite_:
+    lda [rBGP], %10100100
+    halt
+    halt
+    halt
+    halt
+    lda [rBGP], %01010100
+    halt
+    halt
+    halt
+    halt
+    lda [rBGP], %00000000
+    halt
+    halt
+    halt
+    halt
+    ret
+FadeFromWhite:
+    lda [rBGP], %00000000
+    halt
+    halt
+    halt
+    halt
+    lda [rBGP], %01010100
+    halt
+    halt
+    halt
+    halt
+    lda [rBGP], %10100100
+    halt
+    halt
+    halt
+    halt
+    lda [rBGP], %11100100
+    halt
+    halt
+    halt
+    halt
+    ret
+    
 CopyData:
 ; copy bc bytes of data from hl to de
 	ld a,[hli]
@@ -537,11 +583,9 @@ Start:
     ei
     
     call WaitForKey
-    call ClearTilemap
-    halt
-    halt
-    halt
     
+    call FadeToWhite
+    call ClearTilemap
     call DisableLCD
     ; set up ingame graphics
     ld hl, Tiles
@@ -558,6 +602,7 @@ Start:
     ld de, $8000
     ld bc, $800
     call CopyData
+    lda [H_FAST_VCOPY], 1
     call EnableLCD
     jp InitGame
 
@@ -618,11 +663,23 @@ AddScore:
     ld e, a
     ld a, [H_SCORE+1]
     ld d, a
+    push hl
     add hl, de
     ld a, l
     ld [H_SCORE], a
     ld a, h
     ld [H_SCORE+1], a
+    pop hl
+    ld a, [H_PLUSSCORE]
+    ld e, a
+    ld a, [H_PLUSSCORE+1]
+    ld d, a
+    add hl, de
+    ld a, l
+    ld [H_PLUSSCORE], a
+    ld a, h
+    ld [H_PLUSSCORE+1], a
+    
     ld a, [H_HIGHSCORE]
     ld e, a
     ld a, [H_HIGHSCORE+1]
@@ -688,6 +745,7 @@ WriteNumAndCarry:
     push bc
     call Modulo10
     ld a, c
+    ;add a
     add $e8
     ld [hld], a
     pop bc
@@ -706,24 +764,47 @@ WriteNumber:
     call WriteNumAndCarry
     call WriteNumAndCarry
     ret
+    
+SprWriteNumAndCarry:
+    push bc
+    call Modulo10
+    ld a, c
+    add a
+    add $60
+    ld [hld], a
+    pop bc
+    call Div10
+    ret
+
+SprWriteNumber:
+    ld a, [de]
+    ld c, a
+    inc de
+    ld a, [de]
+    ld b, a
+    call SprWriteNumAndCarry
+    call SprWriteNumAndCarry
+    call SprWriteNumAndCarry
+    call SprWriteNumAndCarry
+    ret
 
 UpdateTilemapScore:
     ; draw score
     hlcoord $11, 1
-    ld a, $e1
+    ld a, $e0
     ld [hli], a
     inc a
     ld [hli], a
     inc a
     ld [hli], a
     hlcoord $11, $a
-    ld a, $e4
+    ld a, $e3
     ld [hli], a
     inc a
     ld [hli], a
     inc a
     ld [hli], a
-    ld a, $e2
+    inc a
     ld [hli], a
     inc a
     ld [hli], a
@@ -978,6 +1059,41 @@ Has2048Tile:
     and a
     ret
 
+StartScoreAnim:
+    ret ; XXX todo
+    ld a, %11010000
+    ld [rOBP0], a
+    ld de, H_PLUSSCORE
+    ld hl, W_ANIMSCORETILES+5
+    call SprWriteNumber
+    ld a, $74
+    ld [hl], a
+    push hl
+    pop de
+    
+    ld b, 5
+    ld c, 5*8
+    
+    ld hl, W_OAM;+$8c
+.loop
+    lda [hli], 144+4
+    lda [hli], c
+    lda [hli], [de]
+    inc de
+    ld0 [hli]
+    ld a, c
+    add 8
+    ld c, a
+    dec b
+    jr nz, .loop
+    
+    lda [H_ANIMSCORE], 1
+    ret
+    
+
+AnimateScore:
+    ret
+
 ClearMergeBits:
     ; operates on hl
     ld b, 16
@@ -1051,6 +1167,8 @@ MoveGrid:
     call PushAnimFrame
     xor a
     ld [H_CURANIMFRAME], a
+    ld [H_PLUSSCORE], a
+    ld [H_PLUSSCORE+1], a
     
     call PrepareDirVals
     
@@ -1349,6 +1467,9 @@ InitGame:
     ld [rBGP], a
     call UpdateTilemap
     call UpdateTilemapScore
+
+    call FadeFromWhite
+    lda [H_FAST_VCOPY], 0
     ;hlcoord 0, 1
     ;ld a, $04
     ;ld b, $0e
@@ -1380,8 +1501,10 @@ InitGame:
     ld [H_ANIMATE], a
     ld [H_FAST_VCOPY], a
     call UpdateTilemapScore
+    call StartScoreAnim
     jr .gameloop
 .input
+    call AnimateScore
     ld a, [H_GAMEOVER]
     and a
     jr nz, .gameover
@@ -1404,6 +1527,7 @@ InitGame:
 .gameover
     call UpdateTilemap
     call WaitForKey
+    call FateToWhite_
     jp InitGame
     
 
