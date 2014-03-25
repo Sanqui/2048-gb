@@ -9,10 +9,10 @@ You'll need rgbds to assemble this: https://github.com/bentley/rgbds
 
 Then just do `make clean && make`.
 
-Or download the assembled ROM (may not be the latest build):
+*Or download the assembled ROM* (may not be the latest build):
 http://sanqui.rustedlogic.net/etc/2048.gb
 
 Port (or, more precisely, clone) by Sanqui (Sanky).
 Tile graphics made by beware of bgb fame.
 
-More info coming soon.
+Recommended emulators: [bgb](http://bgb.bircd.org/), [gambatte](https://github.com/sinamas/gambatte)
