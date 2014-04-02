@@ -1,7 +1,10 @@
+INCLUDE "gbtoz80.asm"
 INCLUDE "constants.asm"
 
 ; rst vectors go unused
 SECTION "rst00",HOME[0]
+    im 1
+    jp StartSMS
     ret
 
 SECTION "rst08",HOME[8]
@@ -19,8 +22,8 @@ SECTION "rst20",HOME[$20]
 SECTION "rst30",HOME[$30]
     ret
 
-SECTION "rst38",HOME[$38]
-    ret
+SECTION "smsint",HOME[$38]
+    jp VBlankSMS
 
 SECTION "vblank",HOME[$40]
 	jp VBlankHandler
@@ -32,14 +35,300 @@ SECTION "serial",HOME[$58]
 	reti
 SECTION "joypad",HOME[$60]
 	reti
+SECTION "smspause",HOME[$66]
+    retn
 
-SECTION "bank0",HOME[$61]
+SECTION "bank0",HOME[$68]
 
 SECTION "romheader",HOME[$100]
     nop
     jp Start
 
 Section "start",HOME[$150]
+
+
+StartSMS:
+    ld sp, $cff0
+
+    ld hl,VdpData
+    ld b,VdpDataEnd-VdpData
+    ld c,VDPControl
+    otir
+
+    ld hl,$0000 | VRAMWrite
+    call SetVDPAddress
+    ; 2. Output 16KB of zeroes
+    ld bc, $4000    ; Counter for 16KB of VRAM
+ClearVRAMLoop:
+    ld a,$00    ; Value to write
+    out [VDPData],a ; Output to VRAM address, which is auto-incremented after each write
+    dec bc
+    ld a,b
+    or c
+    jp nz,ClearVRAMLoop
+
+    ld hl,$0000 | CRAMWrite
+    call SetVDPAddress
+    ; 2. Output colour data
+    ld hl,PaletteData
+    ld b,(PaletteDataEnd-PaletteData)
+    ld c,VDPData
+    otir
+
+    ld hl,$0000 | VRAMWrite
+    call SetVDPAddress
+    ; 2. Output tile data
+    ld hl,Title              ; Location of tile data
+    ld bc,$2600  ; Counter for number of bytes to write
+.loop
+    ; Output data byte then three zeroes, because our tile data is 1 bit
+    ; and must be increased to 4 bit
+    ld a,[hl]        ; Get data byte
+    out [VDPData],a
+    ;out [VDPData],a
+    inc hl           ; Add one to hl so it points to the next data byte
+    dec bc
+    ld a,b
+    or c
+    jr nz,.loop
+
+
+    ; Turn screen on
+    ld a,%11100000
+;          |||| |`- Zoomed sprites -> 16x16 pixels
+;          |||| `-- Doubled sprites -> 2 tiles per sprite, 8x16
+;          |||`---- 30 row/240 line mode
+;          ||`----- 28 row/224 line mode
+;          |`------ VBlank interrupts
+;          `------- Enable display
+    out [VDPControl],a
+    ld a,$81
+    out [VDPControl],a
+    ei
+
+    jp Start_
+
+
+SetVDPAddress:
+; Sets the VDP address
+; Parameters: hl = address
+    push af
+    ld a,l
+    out [VDPControl],a
+    ld a,h
+    out [VDPControl],a
+    pop af
+    ret
+
+
+PaletteData:
+    RGBSMS 3, 3, 3
+    RGBSMS 2, 2, 3
+    RGBSMS 0, 0, 1
+    RGBSMS 0, 0, 0
+    RGBSMS 0, 1, 0
+    RGBSMS 0, 2, 0
+    RGBSMS 0, 3, 0
+    RGBSMS 0, 3, 0
+rept 3*8
+    RGBSMS 2, 2, 3
+endr
+    
+PaletteDataEnd
+
+PaletteDataIngame:
+    RGBSMS 3, 3, 3
+    RGBSMS 2, 2, 3
+    RGBSMS 3, 3, 0
+    RGBSMS 3, 2, 0
+    RGBSMS 1, 1, 0
+    RGBSMS 0, 0, 0
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 3
+    
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 0
+    RGBSMS 3, 2, 0
+    RGBSMS 1, 1, 0
+    RGBSMS 0, 0, 0
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 3
+    
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 0
+    RGBSMS 3, 2, 0
+    RGBSMS 1, 1, 0
+    RGBSMS 0, 0, 0
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 3
+    
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 0
+    RGBSMS 3, 2, 0
+    RGBSMS 1, 1, 0
+    RGBSMS 0, 0, 0
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 3
+PaletteDataIngameEnd:
+
+
+PaletteDataFadeout:
+    RGBSMS 3, 3, 3
+    RGBSMS 2, 2, 3
+    RGBSMS 3, 3, 0
+    RGBSMS 3, 2, 0
+    RGBSMS 1, 1, 0
+    RGBSMS 0, 0, 0
+    RGBSMS 3, 3, 3
+    RGBSMS 3, 3, 3
+PaletteDataFadeoutEnd
+
+; VDP initialisation data
+VdpData:
+    db $04,$80,$00,$81,$ff,$82,$ff,$85,$ff,$86,$ff,$87,$00,$88,$00,$89,$ff,$8a
+VdpDataEnd:
+
+VBlankCopyOAMSMS:
+    ld hl,$3f00 | VRAMWrite
+    call SetVDPAddress
+    ld hl, W_OAM
+    ld b, $28
+.yloop
+    ld a,[hl]
+    out [VDPData],a
+    inc hl
+    inc hl
+    inc hl
+    inc hl
+    dec b
+    jr nz, .yloop
+    
+    ld hl,$3f80 | VRAMWrite
+    call SetVDPAddress
+    ld hl, $c301
+    ld b, $28
+.xnloop
+    ld a,[hl]
+    add $28
+    out [VDPData],a
+    inc hl
+    ld a,[hl]
+    out [VDPData],a
+    inc hl
+    inc hl
+    inc hl
+    dec b
+    jr nz, .xnloop
+    
+    ret
+
+VBlankSMS:
+    push af
+    in a, [VPDStatus]
+    ld a, [H_TURNOFF]
+    and a
+    jr z, .on
+    ld a,%00100010
+;          |||| |`- Zoomed sprites -> 16x16 pixels
+;          |||| `-- Doubled sprites -> 2 tiles per sprite, 8x16
+;          |||`---- 30 row/240 line mode
+;          ||`----- 28 row/224 line mode
+;          |`------ VBlank interrupts
+;          `------- Enable display
+    out [VDPControl],a
+    push hl
+    pop hl
+    push hl
+    pop hl
+    ld a,$81
+    out [VDPControl],a
+    xor a
+    ld [H_TURNOFF], a
+    pop af
+    ret
+.on
+    push bc
+    push de
+    push hl
+    call CopyTilemapSMS
+    call VBlankCopyOAMSMS
+    call ReadJoypadSMS
+    ld hl, H_TIMER
+    inc [hl]
+    ld a, r
+    ld b, a
+    call GetRNG
+    pop hl
+    pop de
+    pop bc
+    pop af
+    ei
+    ret
+
+CopyTilemapSMS:
+    ld hl,$3800 | VRAMWrite
+    call SetVDPAddress
+    ld hl, W_TILEMAP
+    ld b, 23
+.loop
+rept 32
+    ld a,[hl]    ; Get data byte
+    out [VDPData],a
+    xor a
+    out [VDPData],a
+    inc hl
+endr
+    dec b
+    jp nz,.loop
+    ret
+
+ReadJoypadSMS:
+	ld a, [H_JOY]
+	ld [H_JOYOLD], a
+    ; SMS:  x x 2 1 r l d u
+    ; GB:   d u l r S s B A
+    in a, [$dc]
+    xor a, $ff
+    ;ld [$c000], a
+    ;swap
+    rrc a
+    rrc a
+    rrc a
+    rrc a
+    ; SMS:  r l d u x x 2 1
+    ld b, a
+    and %00001111
+    bit 4, b ; u
+    jr z, .no_u
+    set 6, a
+.no_u
+    bit 5, b
+    jr z, .no_d
+    set 7, a
+.no_d
+    bit 6, b
+    jr z, .no_l
+    set 5, a
+.no_l 
+    bit 7, b
+    jr z, .no_r
+    set 4, a
+.no_r
+	ld [H_JOY],a ; save joypad state
+	
+	ld a, [H_JOY]
+	ld b, a
+	ld a, [H_JOYOLD]
+	xor $ff
+	and b
+	ld [H_JOYNEW], a
+	ret
+    
+
+; gb:
 
 VBlankHandler:
     push af
@@ -191,7 +480,7 @@ CopyTilemap: ; We can copy just 8 lines per vblank.
     ret
 
 FastVblank:
-    ld [W_SPTMP], sp
+    ;ld [W_SPTMP], sp
 ;    ld a, [H_FAST_PART]
 ;    and a
 ;    jr nz, .bottom
@@ -248,36 +537,33 @@ endr
     ret
 
 DisableLCD: ; $0061
-	xor a
-	ld [$ff0f],a
-	ld a,[$ffff]
-	ld b,a
-	res 0,a
-	ld [$ffff],a
-.waitVBlank
-	ld a,[$ff44]
-	cp a,$91
-	jr nz,.waitVBlank
-	ld a,[$ff40]
-	and a,$7f	; res 7,a
-	ld [$ff40],a
-	ld a,b
-	ld [$ffff],a
+	ld a, 1
+	ld [H_TURNOFF], a
+	halt
 	ret
 
 EnableLCD:
-	ld a,[$ff40]
-	set 7,a
-	ld [$ff40],a
+    ld a,%11100010
+;          |||| |`- Zoomed sprites -> 16x16 pixels
+;          |||| `-- Doubled sprites -> 2 tiles per sprite, 8x16
+;          |||`---- 30 row/240 line mode
+;          ||`----- 28 row/224 line mode
+;          |`------ VBlank interrupts
+;          `------- Enable display
+    out [VDPControl],a
+    ld a,$81
+    out [VDPControl],a
 	ret
 
 FadeToWhite:
+    ret
     lda [rBGP], %11100100
     halt
     halt
     halt
     halt
 FateToWhite_:
+    ret
     lda [rBGP], %10100100
     halt
     halt
@@ -295,6 +581,7 @@ FateToWhite_:
     halt
     ret
 FadeFromWhite:
+    ret
     lda [rBGP], %00000000
     halt
     halt
@@ -394,7 +681,7 @@ ClearOAM:
     
 ClearTilemap:
     ld hl, W_TILEMAP
-    ld bc, 20*18
+    ld bc, 32*24
 .loop
     xor a
     ld [hli], a
@@ -461,7 +748,7 @@ ReadJoypadRegister: ; 15F
 	ret
 
 GetRNG:
-    ld a, [rDIV]
+    ld a, r
     ld b, a
     ld a, [H_RNG1]
     xor b
@@ -483,7 +770,7 @@ WriteDMACodeToHRAM:
 	ld hl, DMARoutine
 .copyLoop
 	ld a, [hli]
-	ld [$ff00+c], a
+	;ld [$ff00+c], a
 	inc c
 	dec b
 	jr nz, .copyLoop
@@ -492,7 +779,7 @@ WriteDMACodeToHRAM:
 ; this routine is copied to HRAM and executed there on every VBlank
 DMARoutine:
 	ld a, W_OAM >> 8
-	ld [$ff00+$46], a   ; start DMA
+	;ld [$ff00+$46], a   ; start DMA
 	ld a, $28
 .waitLoop               ; wait for DMA to finish
 	dec a
@@ -560,15 +847,17 @@ Start:
     ld a, $8
     ld [H_VCOPY_ROWS], a
     
+Start_:
+    
     ; set up ingame graphics
-    ld hl, Title
-    ld de, $9000
-    ld bc, $800
-    call CopyData
-    ld hl, Title+$800
-    ld de, $8800
-    ld bc, $100
-    call CopyData
+    ;ld hl, Title
+    ;ld de, $9000
+    ;ld bc, $800
+    ;call CopyData
+    ;ld hl, Title+$800
+    ;ld de, $8800
+    ;ld bc, $100
+    ;call CopyData
     
     ld hl, TitleTilemap
     ld de, W_TILEMAP
@@ -588,42 +877,88 @@ Start:
     call ClearTilemap
     call DisableLCD
     ; set up ingame graphics
-    ld hl, Tiles
-    ld de, $9000
-    ld bc, $800
-    call CopyData
+    ld hl,$0000 | VRAMWrite
+    call SetVDPAddress
+    ; 2. Output tile data
+    ld hl,Tiles              ; Location of tile data
+    ld bc,$2000  ; Counter for number of bytes to write
+.loop
+    ; Output data byte then three zeroes, because our tile data is 1 bit
+    ; and must be increased to 4 bit
+    ld a,[hl]        ; Get data byte
+    out [VDPData],a
+    ;out [VDPData],a
+    inc hl           ; Add one to hl so it points to the next data byte
+    dec bc
+    ld a,b
+    or c
+    jr nz, .loop
     
-    ld hl, Tiles+$800
-    ld de, $8800
-    ld bc, $800
-    call CopyData
+    ld hl,$2000 | VRAMWrite
+    call SetVDPAddress
+    ; 2. Output tile data
+    ld hl,Sprites              ; Location of tile data
+    ld bc,$1000  ; Counter for number of bytes to write
+.loop2
+    ; Output data byte then three zeroes, because our tile data is 1 bit
+    ; and must be increased to 4 bit
+    ld a,[hl]        ; Get data byte
+    out [VDPData],a
+    ;out [VDPData],a
+    inc hl           ; Add one to hl so it points to the next data byte
+    dec bc
+    ld a,b
+    or c
+    jr nz, .loop2
     
-    ld hl, Sprites
-    ld de, $8000
-    ld bc, $800
-    call CopyData
-    lda [H_FAST_VCOPY], 1
+
+    ld hl,$0000 | CRAMWrite
+    call SetVDPAddress
+    ; 2. Output colour data
+    ld hl,PaletteDataIngame
+    ld b,(PaletteDataIngameEnd-PaletteDataIngame)
+    ld c,VDPData
+    otir
+    
+;    ld hl,$0000 | VRAMWrite
+;    call SetVDPAddress
+;    ld bc, $0400
+;.hiloop
+;    ld a, 1
+;    out [VDPData],a
+;    xor a
+;    out [VDPData],a
+;    dec bc
+;    jr nz, .hiloop
+    
+    ld a, 1
+    ld [H_FAST_VCOPY], a
     call EnableLCD
     jp InitGame
 
 TitleTilemap:
-    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    db $00, $00, $0f, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $00, $00, $00
-    db $00, $00, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $1a, $1b, $1c, $1d, $1e, $1f, $00, $00
-    db $00, $00, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $2a, $2b, $2c, $2d, $2e, $2f, $00, $00
-    db $00, $00, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $3a, $3b, $3c, $3d, $3e, $3f, $00, $00
-    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $7e, $7f, $00, $00, $00, $00, $00
-    db $00, $00, $40, $41, $42, $43, $44, $45, $46, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    db $00, $00, $00, $00, $47, $48, $49, $4a, $4b, $4c, $4d, $4e, $4f, $50, $51, $52, $53, $54, $00, $00
-    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    db $00, $00, $55, $56, $57, $58, $59, $5a, $5b, $5c, $5d, $86, $87, $88, $00, $00, $00, $00, $00, $00
-    db $00, $00, $00, $00, $5e, $5f, $60, $61, $62, $63, $64, $65, $66, $67, $68, $00, $00, $00, $00, $00
-    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    db $00, $00, $69, $6a, $6b, $6c, $6d, $6e, $6f, $70, $71, $72, $73, $74, $00, $00, $00, $00, $00, $00
-    db $00, $00, $00, $00, $75, $76, $77, $78, $79, $7a, $7b, $7c, $7d, $00, $00, $00, $00, $00, $00, $00
-    db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    db $00, $00, $00, $00, $00, $00, $00, $80, $81, $82, $83, $84, $85, $00, $00, $00, $00, $00, $00, $00
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$0f, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $90, $91, $92, $93, $94,$95,0,0,0,0,0
+    db 0,0,0,0,0,0,$10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $1a, $1b, $1c, $1d, $1e, $a0, $a1, $a2, $a3, $a4,$a5,0,0,0,0,0
+    db 0,0,0,0,0,0,$20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $2a, $2b, $2c, $2d, $2e, $b0, $b1, $b2, $b3, $b4,$b5,0,0,0,0,0
+    db 0,0,0,0,0,0,$30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $3a, $3b, $3c, $3d, $3e, $c0, $c1, $c2, $c3, $c4,$c5,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $40, $41, $42, $43, $44, $45, $46, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $47, $48, $49, $4a, $4b, $4c, $4d, $4e, $4f, $50, $51, $52, $53, $54, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $55, $56, $57, $58, $89, $8a, $8b, $8c, $8d, $59, $5a, $5b, $5c, $5d, $86, $87, $88, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $5e, $5f, $60, $61, $62, $63, $64, $65, $66, $67, $68, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $69, $6a, $6b, $6c, $6d, $6e, $6f, $70, $71, $72, $73, $74, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $75, $76, $77, $78, $79, $7a, $7b, $7c, $7d, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $80, $81, $82, $83, $84, $85, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,0,0,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $96, $97, $98, $99, $9a, $9b, $9c, $9d,$9e,$9f,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $a6, $a7, $a8, $a9, $aa, $ab, $ac, $ad,$ae,$af,0,0,0,0
+    db 0,0,0,0,0,0,$00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $b6, $b7, $b8, $b9, $ba, $bb, $bc, $bd,$be,$bf,0,0,0,0
 TitleTilemapEnd
 
 ModuloB:
@@ -680,10 +1015,14 @@ AddScore:
     ld a, h
     ld [H_PLUSSCORE+1], a
     
-    lda l, [H_SCORE]
-    lda h, [H_SCORE+1]
-    lda e, [H_HIGHSCORE]
-    lda d, [H_HIGHSCORE+1]
+    ld a, [H_SCORE]
+    ld l,a
+    ld a,[H_SCORE+1]
+    ld h, a
+    ld a, [H_HIGHSCORE]
+    ld e, a
+    ld a, [H_HIGHSCORE+1]
+    ld d, a
     cp h
     jr z, .maybe
     jr nc, .nothi
@@ -792,14 +1131,14 @@ SprWriteNumber:
 
 UpdateTilemapScore:
     ; draw score
-    hlcoord $11, 1
+    hlcoord $15, 6
     ld a, $e0
     ld [hli], a
     inc a
     ld [hli], a
     inc a
     ld [hli], a
-    hlcoord $11, $a
+    hlcoord $15, $a+6
     ld a, $e3
     ld [hli], a
     inc a
@@ -811,31 +1150,31 @@ UpdateTilemapScore:
     inc a
     ld [hli], a
     
-    hlcoord $11, 8
+    hlcoord $15, 8+6
     ld de, H_SCORE
     call WriteNumber
-    hlcoord $11, $13
+    hlcoord $15, $13+6
     ld de, H_HIGHSCORE
     call WriteNumber
     ret
 
 GridTilemap:
-    db $00, $00, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $00, $00
-    db $00, $00, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $00, $00
-    db $00, $00, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $00, $00
-    db $00, $00, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $00, $00
-    db $00, $00, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $00, $00
-    db $00, $00, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $00, $00
-    db $00, $00, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $00, $00
-    db $00, $00, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $00, $00
-    db $00, $00, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $00, $00
-    db $00, $00, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $00, $00
-    db $00, $00, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $00, $00
-    db $00, $00, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $00, $00
-    db $00, $00, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $00, $00
-    db $00, $00, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $00, $00
-    db $00, $00, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $00, $00
-    db $00, $00, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $00, $00 
+    db $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13
+    db $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17
+    db $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B
+    db $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F
+    db $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13
+    db $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17
+    db $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B
+    db $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F
+    db $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13
+    db $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17
+    db $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B
+    db $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F
+    db $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13, $10, $11, $12, $13
+    db $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17, $14, $15, $16, $17
+    db $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B, $18, $19, $1A, $1B
+    db $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F, $1C, $1D, $1E, $1F
 
 DetermineFastVcopyPart: ; XXX unused, remove
     ld hl, W_ANIMFRAMES
@@ -875,7 +1214,7 @@ endr
 
 TilemapAddValues:
 ; down up left right
-    dw 20, -20, -1, 1
+    dw 32, -32, -1, 1
 
 UpdateTilemap:
     ld a, [H_ANIMDIR]
@@ -889,11 +1228,25 @@ UpdateTilemap:
     ld a, [hl]
     ld [H_CURTMAPADD+1], a
     ; draw 2048 tiles
-    ld hl, GridTilemap
-    decoord 1, 0
-    ld bc, 320
+    ld de, GridTilemap
+    hlcoord 4, 8
+    ld b, 16
+    ld c, 16
     di
-    call CopyData
+.row
+    ld b, 16
+.col
+    ld a, [de]
+    ld [hli], a
+    inc de
+    dec b
+    jr nz, .col
+    push bc
+    ld bc, 16
+    add hl, bc
+    pop bc
+    dec c
+    jr nz, .row
     
     ld bc, $0000
     ld a, [H_ANIMATE]
@@ -907,14 +1260,14 @@ UpdateTilemap:
 .regular
     ld de, W_2048GRID
 .picked
-    hlcoord 1, 2
+    hlcoord 4, 8
     dec de
 .loop
     inc de
     ld a, [de]
     res 7, a
     and a
-    jr z, .blank
+    jp z, .blank
     inc a
     sla a
     sla a
@@ -938,7 +1291,7 @@ UpdateTilemap:
 .shiftloop
     add hl, de
     dec b
-    jr nz, .shiftloop
+    jp nz, .shiftloop
 .noanim
     pop de
     pop bc
@@ -954,13 +1307,13 @@ UpdateTilemap:
     ld [hli], a
     inc a
     push bc
-    ld bc, 16
+    ld bc, 28
     add hl, bc
     pop bc
     dec c
-    jr nz, .tileloop
+    jp nz, .tileloop
     push bc
-    ld bc,0 -((20*4)-4)
+    ld bc,0 -((32*4)-4)
     add hl, bc
     pop bc
     
@@ -997,12 +1350,12 @@ UpdateTilemap:
     cp 16
     jr z, .ret
     and %00000011
-    jr nz, .loop
+    jp nz, .loop
     push bc
-    ld bc, 20*3+4
+    ld bc, 32*3 + 16; OFFSET FROM LEFT
     add hl, bc
     pop bc
-    jr .loop
+    jp .loop
 
 .blank
     inc hl
@@ -1019,9 +1372,9 @@ GameOver:
     ld [H_GAMEOVER], a
     ld a, %10010100
     ld [rBGP], a
-    xor a
-    ld b, 10
-    ld de, $4034
+    ld a, $10
+    ld b, 9
+    ld de, $403b
     ld hl, W_OAM
     call WriteSpriteRow
     ld a, $30
@@ -1036,9 +1389,9 @@ YouWin:
     ld [H_GAMEOVER], a
     ld a, %10010100
     ld [rBGP], a
-    ld a, $14
+    ld a, $20
     ld b, 9
-    ld de, $4038
+    ld de, $403b
     ld hl, W_OAM
     call WriteSpriteRow
     ld a, $30
@@ -1078,9 +1431,12 @@ StartScoreAnim:
     
     ld hl, W_OAM;+$8c
 .loop
-    lda [hli], 144+4
-    lda [hli], c
-    lda [hli], [de]
+    ld a, 144+4
+    ld [hli],a
+    ld a, c
+    ld [hli], a
+    ld a, [de]
+    ld [hli], a
     inc de
     ld0 [hli]
     ld a, c
@@ -1089,7 +1445,8 @@ StartScoreAnim:
     dec b
     jr nz, .loop
     
-    lda [H_ANIMSCORE], 1
+    ld a, 1
+    ld [H_ANIMSCORE], a
     ret
     
 
@@ -1450,6 +1807,21 @@ AddNewTile:
     ret
 
 InitGame:
+    ld a, 1
+    ld b, $0d
+    hlcoord 0, 10
+    call WriteDataInc ; write data in hl increasing a until b.
+    hlcoord 1, 8
+    ld a, $0d
+    ld [hli], a
+    inc a
+    ld [hli], a
+    inc a
+    ld [hli], a
+    ld a, $d0
+    ld b, $dd
+    call WriteDataInc ; write data in hl increasing a until b.
+    
     xor a
     ld [H_SCORE], a
     ld [H_SCORE+1], a
@@ -1471,7 +1843,8 @@ InitGame:
     call UpdateTilemapScore
 
     call FadeFromWhite
-    lda [H_FAST_VCOPY], 0
+    xor a
+    ld [H_FAST_VCOPY], a
     ;hlcoord 0, 1
     ;ld a, $04
     ;ld b, $0e
@@ -1525,7 +1898,7 @@ InitGame:
     bit 0, a
     call nz, MoveRight
     call UpdateTilemap
-    jr .gameloop
+    jp .gameloop
 .gameover
     call UpdateTilemap
     call WaitForKey
@@ -1535,14 +1908,22 @@ InitGame:
 
 Tiles:
     INCBIN "gfx/tiles.2bpp"
-Sprites:
-    INCBIN "gfx/sprites.2bpp"
+
+
+
+
+SECTION "bank1",DATA,BANK[$1]
 Title:
     INCBIN "gfx/title.2bpp"
+Sprites:
+    INCBIN "gfx/sprites.2bpp"
 
-
-
-
+SECTION "smsheader",DATA[$7ff0],BANK[$1]
+    db "TMR SEGA  "
+    dw $0000 ; checksum
+    dw $0000 ; product code (bcd)
+    db 0   ; version
+    db $71
 
 
 

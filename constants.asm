@@ -63,12 +63,12 @@ rIE EQU $ffff ; Interrupt Enable (R/W)
 
 ; macro for easily selecting coordinates on screen
 W_TILEMAP EQU $C000
-W_OAM EQU $C200
+W_OAM EQU $C300
 
 ;\1 = X
 ;\2 = Y
 FuncCoord: MACRO
-Coord = W_TILEMAP + 20 * \2 + \1
+Coord = W_TILEMAP + 32 * \2 + \1
 	ENDM
 	
 decoord: MACRO
@@ -149,6 +149,17 @@ H_GAMEOVER EQU $FFB6
 
 H_TIMER EQU $FFF0
 H_RNG1 EQU $FFF1
+H_TURNOFF EQU $fff7
 H_JOY EQU $fff8
 H_JOYOLD EQU $fff9
 H_JOYNEW EQU $fffA
+
+
+RGB: MACRO
+	db ((\3/8) << 4 | (\2/8) << 2 | (\1/8))
+	ENDM
+	
+	
+RGBSMS: MACRO
+	db (\3 << 4 | \2 << 2 | \1)
+	ENDM
