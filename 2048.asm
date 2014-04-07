@@ -52,7 +52,11 @@ VBlankHandler:
     call FastVblank
     jr .copied
 .regular
+    ld a, [H_FIRSTVBLANK]
+    and a
+    jr nz, .skip
     call CopyTilemap
+.skip
 .copied
     call $FF80
     call ReadJoypadRegister
@@ -508,7 +512,7 @@ Start:
     ld a, %11010000
     ld [rOBP0], a
     
-    ld a, 0
+    xor a
     ld [rSCX], a
     ld [rSCY], a
     
@@ -559,6 +563,7 @@ Start:
     ld [H_VCOPY_H], a
     ld a, $8
     ld [H_VCOPY_ROWS], a
+    lda [H_FIRSTVBLANK], 1
     
     ; set up ingame graphics
     ld hl, Title
@@ -576,11 +581,14 @@ Start:
     call CopyData
         
     call EnableLCD
-    xor a
+    
     ld [$ffff], a
     ld a, %00000001
     ld [$ffff], a
     ei
+    halt
+    xor a
+    ld [H_FIRSTVBLANK], a
     
     call WaitForKey
     
