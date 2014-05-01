@@ -37,9 +37,12 @@ SECTION "bank0",HOME[$61]
 
 SECTION "romheader",HOME[$100]
     nop
-    jp Start
+    jp Start150
 
 Section "start",HOME[$150]
+
+Start150:
+    jp Start
 
 VBlankHandler:
     push af
@@ -462,6 +465,12 @@ ReadJoypadRegister: ; 15F
 	xor $ff
 	and b
 	ld [H_JOYNEW], a
+	
+	ld a, [H_JOY]
+	cp %00001111
+	ret nz
+	jp Start150
+	
 	ret
 
 GetRNG:
@@ -773,6 +782,7 @@ WriteNumber:
     call WriteNumAndCarry
     call WriteNumAndCarry
     call WriteNumAndCarry
+    call WriteNumAndCarry
     ret
     
 SprWriteNumAndCarry:
@@ -1040,7 +1050,7 @@ GameOver:
     ret
 
 YouWin:
-    ld a, 1
+    ld a, 2
     ld [H_GAMEOVER], a
     ld a, %10010100
     ld [rBGP], a
@@ -1057,6 +1067,9 @@ YouWin:
     ret
 
 Has2048Tile:
+    ld a, [H_CONTINUING]
+    and a
+    ret nz
     ld hl, W_2048GRID
     ld b, 16
 .loop
@@ -1491,12 +1504,20 @@ InitGame:
     and a
     jr z, .input
     ; animate
+    
+    ld hl, H_JOYNEW
+    ld a, [hl]
+    ;ld [hl], 0
+    swap a
+    and %00001111
+    and a
+    jr nz, .doneanim
 
     call UpdateTilemap
     ld a, [H_ANIMSUB]
     inc a
     ld [H_ANIMSUB], a
-    cp 3
+    cp 4
     jr nz, .gameloop
     xor a
     ld [H_ANIMSUB], a
@@ -1507,12 +1528,13 @@ InitGame:
     ld a, [H_CURANIMFRAME]
     cp b
     jr nz, .gameloop
+.doneanim
     xor a
     ld [H_ANIMATE], a
     ld [H_FAST_VCOPY], a
     call UpdateTilemapScore
     call StartScoreAnim
-    jr .gameloop
+    ;jr .gameloop
 .input
     call AnimateScore
     ld a, [H_GAMEOVER]
@@ -1536,10 +1558,29 @@ InitGame:
     jr .gameloop
 .gameover
     call UpdateTilemap
-    call WaitForKey
+    call UpdateTilemapScore
+.goloop
+    halt
+    ld a, [H_JOYNEW]
+    and a, %00000100
+    jr nz, .select
+    ld a, [H_JOYNEW]
+    and a, %00001001 ; A or START
+    jr z, .goloop
     call FateToWhite_
     jp InitGame
-    
+.select
+    ld a, [H_GAMEOVER]
+    cp 2
+    jr nz, .goloop
+    xor a
+    ld [H_GAMEOVER], a
+    ld a, 1
+    ld [H_CONTINUING], a
+    call ClearOAM
+    ld a, %11100100
+    ld [rBGP], a
+    jp .gameloop
 
 Tiles:
     INCBIN "gfx/tiles.2bpp"
