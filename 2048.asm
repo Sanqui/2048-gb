@@ -135,7 +135,7 @@ VblankCopyBottomRow:
 rept 19
     ld a, [hli]
     ld [de], a
-    inc de
+    inc e
 endr
     ld a, [hl]
     ld [de], a
@@ -531,7 +531,10 @@ DivB:
     ret
 
 Powers:
-    dw 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+    ;dw 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+    dw $0001, $0002, $0004, $0008, $0016, $0032
+    dw $0064, $0128, $0256, $0512, $1024, $2048
+    dw $4096, $8192
 
 AddScore:
     push hl
@@ -544,44 +547,57 @@ AddScore:
     ld a, [hli]
     ld h, [hl]
     ld l, a
-    ld a, [H_SCORE]
-    ld e, a
-    ld a, [H_SCORE+1]
-    ld d, a
-    push hl
-    add hl, de
-    ld a, l
-    ld [H_SCORE], a
-    ld a, h
-    ld [H_SCORE+1], a
-    pop hl
-    ld a, [H_PLUSSCORE]
-    ld e, a
-    ld a, [H_PLUSSCORE+1]
-    ld d, a
-    add hl, de
-    ld a, l
-    ld [H_PLUSSCORE], a
-    ld a, h
     ld [H_PLUSSCORE+1], a
+    ld a, h
+    ld [H_PLUSSCORE], a
+    push hl
+    pop de
+    ld hl, H_SCORE+2
+    ld a, [hl]
+    add e
+    daa
+    ld [hld], a
+    ld a, [hl]
+    adc d
+    daa
+    ld [hld], a
+    jr nc, .nc
+    inc [hl]
+.nc
     
-    lda l, [H_SCORE]
-    lda h, [H_SCORE+1]
-    lda e, [H_HIGHSCORE]
-    lda d, [H_HIGHSCORE+1]
-    cp h
-    jr z, .maybe
+    ld hl, H_SCORE
+    ld de, H_HIGHSCORE
+    ld a, [de]
+    cp [hl]
+    jr z, .maybe1
     jr nc, .nothi
     jr c, .new
-.maybe
-    ld a, e
-    cp l
+.maybe1
+    inc de
+    inc hl
+    ld a, [de]
+    cp [hl]
+    jr z, .maybe2
     jr nc, .nothi
+    jr c, .new
+.maybe2
+    inc de
+    inc hl
+    ld a, [de]
+    cp [hl]
+    jr z, .nothi
+    jr nc, .nothi
+    jr c, .new
+    
 .new
-    ld a, l
-    ld [H_HIGHSCORE], a
-    ld a, h
-    ld [H_HIGHSCORE+1], a
+    ld de, H_HIGHSCORE+2
+    ld hl, H_SCORE+2
+    lda [de], [hld]
+    dec de
+    lda [de], [hld]
+    dec de
+    lda [de], [hl]
+    
 .nothi
     pop de
     pop hl
@@ -628,29 +644,24 @@ Div10: ; bc /= 10
     pop de
     ret
 
-WriteNumAndCarry:
-    push bc
-    call Modulo10
-    ld a, c
-    ;add a
+WriteBCDByte:
+    ld a, [de]
+    swap a
+    and $0f
     add $e8
-    ld [hld], a
-    pop bc
-    call Div10
+    ld [hli], a
+    ld a, [de]
+    and $0f
+    add $e8
+    ld [hli], a
+    inc de
     ret
 
 WriteNumber:
-; writes number at de to hl (backwards)
-    ld a, [de]
-    ld c, a
-    inc de
-    ld a, [de]
-    ld b, a
-    call WriteNumAndCarry
-    call WriteNumAndCarry
-    call WriteNumAndCarry
-    call WriteNumAndCarry
-    call WriteNumAndCarry
+; writes number at de to hl
+    call WriteBCDByte
+    call WriteBCDByte
+    call WriteBCDByte
     ret
     
 SprWriteNumAndCarry:
@@ -678,29 +689,25 @@ SprWriteNumber:
 
 UpdateTilemapScore:
     ; draw score
-    hlcoord $11, 1
+    hlcoord $11, 0
     ld a, $e0
     ld [hli], a
     inc a
     ld [hli], a
     inc a
     ld [hli], a
-    hlcoord $11, $a
+    hlcoord $11, $9
     ld a, $e3
     ld [hli], a
+rept 4
     inc a
     ld [hli], a
-    inc a
-    ld [hli], a
-    inc a
-    ld [hli], a
-    inc a
-    ld [hli], a
+endr
     
-    hlcoord $11, 8
+    hlcoord $11, 3
     ld de, H_SCORE
     call WriteNumber
-    hlcoord $11, $13
+    hlcoord $11, $e
     ld de, H_HIGHSCORE
     call WriteNumber
     ret
@@ -1342,6 +1349,7 @@ InitGame:
     xor a
     ld [H_SCORE], a
     ld [H_SCORE+1], a
+    ld [H_SCORE+2], a
     ld [H_GAMEOVER], a
     ld hl, W_2048GRID
     ld b, 16
