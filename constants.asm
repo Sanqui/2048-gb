@@ -61,6 +61,15 @@ rUNKNOWN6 EQU $ff76 ; (00h) - Always 00h (Read Only)
 rUNKNOWN7 EQU $ff77 ; (00h) - Always 00h (Read Only)
 rIE EQU $ffff ; Interrupt Enable (R/W)
 
+; MBC1
+MBC1SRamEnable      EQU $0000
+MBC1RomBank         EQU $2000
+MBC1SRamBank        EQU $4000
+MBC1SRamBankingMode EQU $6000
+
+SRAM_DISABLE EQU $00
+SRAM_ENABLE  EQU $0a
+
 ; macro for easily selecting coordinates on screen
 W_TILEMAP EQU $C000
 W_OAM EQU $C200
@@ -153,6 +162,7 @@ H_HIGHSCORE EQU $FFB3
 H_PLUSSCORE EQU $FFB6
 H_GAMEOVER EQU $FFB8
 H_CONTINUING EQU $FFB9
+H_GAMESBEATEN EQU $FFBA ; 2 bytes
 
 H_TIMER EQU $FFF0
 H_RNG1 EQU $FFF1

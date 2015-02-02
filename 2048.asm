@@ -384,6 +384,48 @@ DMARoutine:
 	jr nz, .waitLoop
 	ret
 
+OpenSRAM:
+	ld a, SRAM_ENABLE
+	ld [MBC1SRamEnable], a
+	xor a
+	ld [MBC1SRamBankingMode], a
+	ld [MBC1SRamBank], a
+	ret
+	
+CloseSRAM:
+	xor a
+	ld [MBC1SRamBankingMode], a
+	ld [MBC1SRamEnable], a
+	ret
+
+LoadHighScoreFromSRAM:
+	call OpenSRAM
+	ld hl, $a000
+    ld a, [hli]
+    cp $20
+    jr nz, CloseSRAM
+    ld a, [hli]
+    cp $48
+    jr nz, CloseSRAM
+    lda [H_HIGHSCORE], [hli]
+    lda [H_HIGHSCORE+1], [hli]
+    lda [H_HIGHSCORE+2], [hli]
+    lda [H_GAMESBEATEN], [hli]
+    lda [H_GAMESBEATEN+1], [hli]
+    jp CloseSRAM
+
+WriteHighScoreToSRAM:
+	call OpenSRAM
+	ld hl, $a000
+    lda [hli], $20
+    lda [hli], $48
+    lda [hli], [H_HIGHSCORE]
+    lda [hli], [H_HIGHSCORE+1]
+    lda [hli], [H_HIGHSCORE+2]
+    lda [hli], [H_GAMESBEATEN]
+    lda [hli], [H_GAMESBEATEN+1]
+    jp CloseSRAM
+
 Start:
     di
     
@@ -456,6 +498,8 @@ Start:
     call CopyData
     
     call FastVblank
+        
+    call LoadHighScoreFromSRAM
         
     call EnableLCD
     
@@ -597,6 +641,8 @@ AddScore:
     lda [de], [hld]
     dec de
     lda [de], [hl]
+    
+    call WriteHighScoreToSRAM
     
 .nothi
     pop de
@@ -927,6 +973,15 @@ GameOver:
 YouWin:
     ld a, 2
     ld [H_GAMEOVER], a
+    
+    ld hl, H_GAMESBEATEN
+    lda d, [hli]
+    lda e, [hl]
+    inc de
+    lda [hld], e
+    lda [hl], d
+    call WriteHighScoreToSRAM
+    
     ld a, %10010100
     ld [rBGP], a
     ld a, $14
