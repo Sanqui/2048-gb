@@ -109,6 +109,11 @@ ld0: MACRO
     xor a
     ld \1, a
     ENDM
+    
+djnz: MACRO
+    dec b
+    jr nz, \1
+    ENDM
 
 ; game stuff
 

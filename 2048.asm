@@ -53,12 +53,12 @@ VBlankHandler:
     and a
     jr z, .regular
     call FastVblank
+    xor a
+    ld [H_FAST_VCOPY], a
     jr .copied
 .regular
-    ld a, [H_FIRSTVBLANK]
-    and a
-    jr nz, .skip
-    call CopyTilemap
+    ; load the bottom row (contains score)
+    call VblankCopyBottomRow
 .skip
 .copied
     call $FF80
@@ -71,131 +71,6 @@ VBlankHandler:
     pop bc
     pop af
     reti
-
-CopyTilemap: ; We can copy just 8 lines per vblank.
-; Contains an unrolled loop for speed.
-    ;ld de, $9800
-    ;ld hl, W_TILEMAP
-    ld hl, H_VCOPY_D
-    ld a, [hli]
-    ld d, a
-    ld a, [hli]
-    ld e, a
-    ld a, [hli]
-    ld c, a
-    ld a, [hl]
-    ld l, a
-    ld h, c
-    ld a, [H_VCOPY_ROWS]
-    ld c, a
-.row
-
-    dec c
-    jr z, .done
-
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    
-    ld a, e
-    add $c
-    ld e, a
-    jr nc, .row
-;carry
-    inc d
-    jr .row
-.done
-    ld a, [H_VCOPY_TIMES]
-    inc a
-    ld [H_VCOPY_TIMES], a
-    cp a, $03
-    jr z, .reset
-    cp a, $02
-    jr nz, .eightrows
-    ; only 5 rows left
-    ld a, $5
-    ld [H_VCOPY_ROWS], a
-
-.eightrows
-    ld a, d
-    ld [H_VCOPY_D], a
-    ld a, e
-    ld [H_VCOPY_E], a
-    ld a, h
-    ld [H_VCOPY_H], a
-    ld a, l
-    ld [H_VCOPY_L], a
-    ret
-.reset
-    ld a, $98
-    ld [H_VCOPY_D], a
-    xor a
-    ld [H_VCOPY_E], a
-    ld a, $C0
-    ld [H_VCOPY_H], a
-    xor a
-    ld [H_VCOPY_L], a
-    ld [H_VCOPY_TIMES], a
-    ld a, $8
-    ld [H_VCOPY_ROWS], a
-    ret
 
 FastVblank:
     ld [W_SPTMP], sp
@@ -254,6 +129,18 @@ endr
     ld sp, hl
     ret
 
+VblankCopyBottomRow:
+    ld hl, W_TILEMAP+(20*17)
+    ld de, $9a20
+rept 19
+    ld a, [hli]
+    ld [de], a
+    inc de
+endr
+    ld a, [hl]
+    ld [de], a
+    ret
+
 DisableLCD: ; $0061
 	xor a
 	ld [$ff0f],a
@@ -280,50 +167,35 @@ EnableLCD:
 
 FadeToWhite:
     lda [rBGP], %11100100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
 FateToWhite_:
     lda [rBGP], %10100100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %01010100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %00000000
-    halt
-    halt
-    halt
-    halt
-    ret
+    jp Delay8Frames
+
 FadeFromWhite:
     lda [rBGP], %00000000
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %01010100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %10100100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %11100100
+    jp Delay8Frames
+
+Delay8Frames:
+    ld b, 8
+    jp DelayFrames
+
+DelayFrames:
+.loop
     halt
-    halt
-    halt
-    halt
+    djnz .loop
     ret
-    
+
 CopyData:
 ; copy bc bytes of data from hl to de
 	ld a,[hli]
@@ -566,12 +438,6 @@ Start:
     call WriteDMACodeToHRAM
     
     ; set up vblank copy offsets
-    ld a, $98
-    ld [H_VCOPY_D], a
-    ld a, $C0
-    ld [H_VCOPY_H], a
-    ld a, $8
-    ld [H_VCOPY_ROWS], a
     lda [H_FIRSTVBLANK], 1
     
     ; set up ingame graphics
@@ -588,6 +454,8 @@ Start:
     ld de, W_TILEMAP
     ld bc, TitleTilemapEnd-TitleTilemap
     call CopyData
+    
+    call FastVblank
         
     call EnableLCD
     
@@ -1482,6 +1350,7 @@ InitGame:
     
     call AddNewTile
     call AddNewTile
+    lda [H_FAST_VCOPY], 1
     ;ld a, 1
     ;ld [W_2048GRID+5], a
     ;ld [W_2048GRID+10], a
@@ -1492,7 +1361,6 @@ InitGame:
     call UpdateTilemapScore
 
     call FadeFromWhite
-    lda [H_FAST_VCOPY], 0
     ;hlcoord 0, 1
     ;ld a, $04
     ;ld b, $0e
@@ -1512,6 +1380,8 @@ InitGame:
     and %00001111
     and a
     jr nz, .doneanim
+    
+    lda [H_FAST_VCOPY], 1
 
     call UpdateTilemap
     ld a, [H_ANIMSUB]
@@ -1531,10 +1401,11 @@ InitGame:
 .doneanim
     xor a
     ld [H_ANIMATE], a
-    ld [H_FAST_VCOPY], a
+    call UpdateTilemap
     call UpdateTilemapScore
     call StartScoreAnim
     ;jr .gameloop
+    lda [H_FAST_VCOPY], 1
 .input
     call AnimateScore
     ld a, [H_GAMEOVER]
@@ -1554,11 +1425,11 @@ InitGame:
     call nz, MoveLeft
     bit 0, a
     call nz, MoveRight
-    call UpdateTilemap
     jr .gameloop
 .gameover
     call UpdateTilemap
     call UpdateTilemapScore
+    lda [H_FAST_VCOPY], 1
 .goloop
     halt
     ld a, [H_JOYNEW]
