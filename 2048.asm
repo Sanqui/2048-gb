@@ -187,7 +187,7 @@ FadeFromWhite:
     jp Delay8Frames
 
 Delay8Frames:
-    ld b, 8
+    ld b, 4  ; i lied
     jp DelayFrames
 
 DelayFrames:
