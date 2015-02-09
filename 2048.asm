@@ -42,7 +42,7 @@ SECTION "bank0",HOME[$68]
 
 SECTION "romheader",HOME[$100]
     nop
-    jp Start
+    stop
 
 Section "start",HOME[$150]
 
@@ -339,9 +339,13 @@ VBlankHandler:
     and a
     jr z, .regular
     call FastVblank
+    xor a
+    ld [H_FAST_VCOPY], a
     jr .copied
 .regular
-    call CopyTilemap
+    ; load the bottom row (contains score)
+    call VblankCopyBottomRow
+.skip
 .copied
     call $FF80
     call ReadJoypadRegister
@@ -353,131 +357,6 @@ VBlankHandler:
     pop bc
     pop af
     reti
-
-CopyTilemap: ; We can copy just 8 lines per vblank.
-; Contains an unrolled loop for speed.
-    ;ld de, $9800
-    ;ld hl, W_TILEMAP
-    ld hl, H_VCOPY_D
-    ld a, [hli]
-    ld d, a
-    ld a, [hli]
-    ld e, a
-    ld a, [hli]
-    ld c, a
-    ld a, [hl]
-    ld l, a
-    ld h, c
-    ld a, [H_VCOPY_ROWS]
-    ld c, a
-.row
-
-    dec c
-    jr z, .done
-
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    ld a, [hli]
-    ld [de], a
-    inc de
-    
-    ld a, e
-    add $c
-    ld e, a
-    jr nc, .row
-;carry
-    inc d
-    jr .row
-.done
-    ld a, [H_VCOPY_TIMES]
-    inc a
-    ld [H_VCOPY_TIMES], a
-    cp a, $03
-    jr z, .reset
-    cp a, $02
-    jr nz, .eightrows
-    ; only 5 rows left
-    ld a, $5
-    ld [H_VCOPY_ROWS], a
-
-.eightrows
-    ld a, d
-    ld [H_VCOPY_D], a
-    ld a, e
-    ld [H_VCOPY_E], a
-    ld a, h
-    ld [H_VCOPY_H], a
-    ld a, l
-    ld [H_VCOPY_L], a
-    ret
-.reset
-    ld a, $98
-    ld [H_VCOPY_D], a
-    xor a
-    ld [H_VCOPY_E], a
-    ld a, $C0
-    ld [H_VCOPY_H], a
-    xor a
-    ld [H_VCOPY_L], a
-    ld [H_VCOPY_TIMES], a
-    ld a, $8
-    ld [H_VCOPY_ROWS], a
-    ret
 
 FastVblank:
     ;ld [W_SPTMP], sp
@@ -536,6 +415,18 @@ endr
     ld sp, hl
     ret
 
+VblankCopyBottomRow:
+    ld hl, W_TILEMAP+(20*17)
+    ld de, $9a20
+rept 19
+    ld a, [hli]
+    ld [de], a
+    inc e
+endr
+    ld a, [hl]
+    ld [de], a
+    ret
+
 DisableLCD: ; $0061
 	ld a, 1
 	ld [H_TURNOFF], a
@@ -558,52 +449,37 @@ EnableLCD:
 FadeToWhite:
     ret
     lda [rBGP], %11100100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
 FateToWhite_:
     ret
     lda [rBGP], %10100100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %01010100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %00000000
-    halt
-    halt
-    halt
-    halt
-    ret
+    jp Delay8Frames
+
 FadeFromWhite:
     ret
     lda [rBGP], %00000000
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %01010100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %10100100
-    halt
-    halt
-    halt
-    halt
+    call Delay8Frames
     lda [rBGP], %11100100
+    jp Delay8Frames
+
+Delay8Frames:
+    ld b, 4  ; i lied
+    jp DelayFrames
+
+DelayFrames:
+.loop
     halt
-    halt
-    halt
-    halt
+    djnz .loop
     ret
-    
+
 CopyData:
 ; copy bc bytes of data from hl to de
 	ld a,[hli]
@@ -745,6 +621,11 @@ ReadJoypadRegister: ; 15F
 	xor $ff
 	and b
 	ld [H_JOYNEW], a
+	
+	ld a, [H_JOY]
+	cp %00001111
+	ret nz
+	
 	ret
 
 GetRNG:
@@ -786,6 +667,50 @@ DMARoutine:
 	jr nz, .waitLoop
 	ret
 
+OpenSRAM:
+	ld a, SRAM_ENABLE
+	ld [MBC1SRamEnable], a
+	xor a
+	ld [MBC1SRamBankingMode], a
+	ld [MBC1SRamBank], a
+	ret
+	
+CloseSRAM:
+	xor a
+	ld [MBC1SRamBankingMode], a
+	ld [MBC1SRamEnable], a
+	ret
+
+LoadHighScoreFromSRAM:
+    ret
+	call OpenSRAM
+	ld hl, $a000
+    ld a, [hli]
+    cp $20
+    jr nz, CloseSRAM
+    ld a, [hli]
+    cp $48
+    jr nz, CloseSRAM
+    lda [H_HIGHSCORE], [hli]
+    lda [H_HIGHSCORE+1], [hli]
+    lda [H_HIGHSCORE+2], [hli]
+    lda [H_GAMESBEATEN], [hli]
+    lda [H_GAMESBEATEN+1], [hli]
+    jp CloseSRAM
+
+WriteHighScoreToSRAM:
+    ret
+	call OpenSRAM
+	ld hl, $a000
+    lda [hli], $20
+    lda [hli], $48
+    lda [hli], [H_HIGHSCORE]
+    lda [hli], [H_HIGHSCORE+1]
+    lda [hli], [H_HIGHSCORE+2]
+    lda [hli], [H_GAMESBEATEN]
+    lda [hli], [H_GAMESBEATEN+1]
+    jp CloseSRAM
+
 Start:
     di
     
@@ -795,7 +720,7 @@ Start:
     ld a, %11010000
     ld [rOBP0], a
     
-    ld a, 0
+    xor a
     ld [rSCX], a
     ld [rSCY], a
     
@@ -840,12 +765,6 @@ Start:
     call WriteDMACodeToHRAM
     
     ; set up vblank copy offsets
-    ld a, $98
-    ld [H_VCOPY_D], a
-    ld a, $C0
-    ld [H_VCOPY_H], a
-    ld a, $8
-    ld [H_VCOPY_ROWS], a
     
 Start_:
     
@@ -863,13 +782,20 @@ Start_:
     ld de, W_TILEMAP
     ld bc, TitleTilemapEnd-TitleTilemap
     call CopyData
+    
+    ;call FastVblank
+        
+    call LoadHighScoreFromSRAM
         
     call EnableLCD
-    xor a
+    
     ld [$ffff], a
     ld a, %00000001
     ld [$ffff], a
     ei
+    halt
+    xor a
+    ld [H_FIRSTVBLANK], a
     
     call WaitForKey
     
@@ -981,7 +907,10 @@ DivB:
     ret
 
 Powers:
-    dw 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+    ;dw 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+    dw $0001, $0002, $0004, $0008, $0016, $0032
+    dw $0064, $0128, $0256, $0512, $1024, $2048
+    dw $4096, $8192
 
 AddScore:
     push hl
@@ -994,48 +923,62 @@ AddScore:
     ld a, [hli]
     ld h, [hl]
     ld l, a
-    ld a, [H_SCORE]
-    ld e, a
-    ld a, [H_SCORE+1]
-    ld d, a
-    push hl
-    add hl, de
-    ld a, l
-    ld [H_SCORE], a
-    ld a, h
-    ld [H_SCORE+1], a
-    pop hl
-    ld a, [H_PLUSSCORE]
-    ld e, a
-    ld a, [H_PLUSSCORE+1]
-    ld d, a
-    add hl, de
-    ld a, l
-    ld [H_PLUSSCORE], a
-    ld a, h
     ld [H_PLUSSCORE+1], a
+    ld a, h
+    ld [H_PLUSSCORE], a
+    push hl
+    pop de
+    ld hl, H_SCORE+2
+    ld a, [hl]
+    add e
+    daa
+    ld [hld], a
+    ld a, [hl]
+    adc d
+    daa
+    ld [hld], a
+    jr nc, .nc
+    inc [hl]
+.nc
     
-    ld a, [H_SCORE]
-    ld l,a
-    ld a,[H_SCORE+1]
-    ld h, a
-    ld a, [H_HIGHSCORE]
-    ld e, a
-    ld a, [H_HIGHSCORE+1]
-    ld d, a
-    cp h
-    jr z, .maybe
+    ld hl, H_SCORE
+    ld de, H_HIGHSCORE
+    ld a, [de]
+    cp [hl]
+    jr z, .maybe1
     jr nc, .nothi
     jr c, .new
-.maybe
-    ld a, e
-    cp l
+.maybe1
+    inc de
+    inc hl
+    ld a, [de]
+    cp [hl]
+    jr z, .maybe2
     jr nc, .nothi
+    jr c, .new
+.maybe2
+    inc de
+    inc hl
+    ld a, [de]
+    cp [hl]
+    jr z, .nothi
+    jr nc, .nothi
+    jr c, .new
+    
 .new
-    ld a, l
-    ld [H_HIGHSCORE], a
-    ld a, h
-    ld [H_HIGHSCORE+1], a
+    ld de, H_HIGHSCORE+2
+    ld hl, H_SCORE+2
+    ld a, [hld]
+    ld [de], a
+    dec de
+    ld a, [hld]
+    ld [de], a
+    dec de
+    ld a, [hl]
+    ld [de], a
+    
+    call WriteHighScoreToSRAM
+    
 .nothi
     pop de
     pop hl
@@ -1082,28 +1025,24 @@ Div10: ; bc /= 10
     pop de
     ret
 
-WriteNumAndCarry:
-    push bc
-    call Modulo10
-    ld a, c
-    ;add a
+WriteBCDByte:
+    ld a, [de]
+    swap a
+    and $0f
     add $e8
-    ld [hld], a
-    pop bc
-    call Div10
+    ld [hli], a
+    ld a, [de]
+    and $0f
+    add $e8
+    ld [hli], a
+    inc de
     ret
 
 WriteNumber:
-; writes number at de to hl (backwards)
-    ld a, [de]
-    ld c, a
-    inc de
-    ld a, [de]
-    ld b, a
-    call WriteNumAndCarry
-    call WriteNumAndCarry
-    call WriteNumAndCarry
-    call WriteNumAndCarry
+; writes number at de to hl
+    call WriteBCDByte
+    call WriteBCDByte
+    call WriteBCDByte
     ret
     
 SprWriteNumAndCarry:
@@ -1141,19 +1080,15 @@ UpdateTilemapScore:
     hlcoord $15, $a+6
     ld a, $e3
     ld [hli], a
+rept 4
     inc a
     ld [hli], a
-    inc a
-    ld [hli], a
-    inc a
-    ld [hli], a
-    inc a
-    ld [hli], a
+endr
     
-    hlcoord $15, 8+6
+    hlcoord $15, 8+1
     ld de, H_SCORE
     call WriteNumber
-    hlcoord $15, $13+6
+    hlcoord $15, $13+3
     ld de, H_HIGHSCORE
     call WriteNumber
     ret
@@ -1385,8 +1320,21 @@ GameOver:
     ret
 
 YouWin:
-    ld a, 1
+    ld a, 2
     ld [H_GAMEOVER], a
+    
+    ld hl, H_GAMESBEATEN
+    ld a, [hli]
+    ld d, a
+    ld a, [hl]
+    ld e, a
+    inc de
+    ld a, e
+    ld [hld], a
+    ld a, d
+    ld [hl], a
+    call WriteHighScoreToSRAM
+    
     ld a, %10010100
     ld [rBGP], a
     ld a, $20
@@ -1402,6 +1350,9 @@ YouWin:
     ret
 
 Has2048Tile:
+    ld a, [H_CONTINUING]
+    and a
+    ret nz
     ld hl, W_2048GRID
     ld b, 16
 .loop
@@ -1825,6 +1776,7 @@ InitGame:
     xor a
     ld [H_SCORE], a
     ld [H_SCORE+1], a
+    ld [H_SCORE+2], a
     ld [H_GAMEOVER], a
     ld hl, W_2048GRID
     ld b, 16
@@ -1843,8 +1795,6 @@ InitGame:
     call UpdateTilemapScore
 
     call FadeFromWhite
-    xor a
-    ld [H_FAST_VCOPY], a
     ;hlcoord 0, 1
     ;ld a, $04
     ;ld b, $0e
@@ -1856,12 +1806,21 @@ InitGame:
     and a
     jr z, .input
     ; animate
+    
+    ld hl, H_JOYNEW
+    ld a, [hl]
+    ;ld [hl], 0
+    swap a
+    and %00001111
+    and a
+    jr nz, .doneanim
+    
 
     call UpdateTilemap
     ld a, [H_ANIMSUB]
     inc a
     ld [H_ANIMSUB], a
-    cp 3
+    cp 4
     jr nz, .gameloop
     xor a
     ld [H_ANIMSUB], a
@@ -1872,12 +1831,13 @@ InitGame:
     ld a, [H_CURANIMFRAME]
     cp b
     jr nz, .gameloop
+.doneanim
     xor a
     ld [H_ANIMATE], a
-    ld [H_FAST_VCOPY], a
+    call UpdateTilemap
     call UpdateTilemapScore
     call StartScoreAnim
-    jr .gameloop
+    ;jr .gameloop
 .input
     call AnimateScore
     ld a, [H_GAMEOVER]
@@ -1897,14 +1857,32 @@ InitGame:
     call nz, MoveLeft
     bit 0, a
     call nz, MoveRight
-    call UpdateTilemap
     jp .gameloop
 .gameover
     call UpdateTilemap
-    call WaitForKey
+    call UpdateTilemapScore
+.goloop
+    halt
+    ld a, [H_JOYNEW]
+    and a, %00000100
+    jr nz, .select
+    ld a, [H_JOYNEW]
+    and a, %00001001 ; A or START
+    jr z, .goloop
     call FateToWhite_
     jp InitGame
-    
+.select
+    ld a, [H_GAMEOVER]
+    cp 2
+    jr nz, .goloop
+    xor a
+    ld [H_GAMEOVER], a
+    ld a, 1
+    ld [H_CONTINUING], a
+    call ClearOAM
+    ld a, %11100100
+    ld [rBGP], a
+    jp .gameloop
 
 Tiles:
     INCBIN "gfx/tiles.2bpp"

@@ -1,4 +1,4 @@
-DUAL = True
+DUAL = False
 
 Z80_OPS = """
 ldi     eda0
