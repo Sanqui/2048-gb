@@ -6,8 +6,7 @@ export LC_CTYPE=C
 all: 2048.sms
 
 2048.o: 2048.asm
-	cat 2048.asm | python gbtoz80.py > 2048.tx
-	rgbasm -o 2048.o 2048.tx
+	./rggasm -o 2048.o 2048.asm
 
 2048.sms: 2048.o
 	rgblink -n 2048.sym -m $*.map -o $@ $<

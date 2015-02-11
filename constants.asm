@@ -124,6 +124,15 @@ djnz: MACRO
     jr nz, \1
     ENDM
 
+IF DEF(_Z80)
+swap: MACRO
+    rra
+    rra
+    rra
+    rra
+ENDM
+ENDC
+
 ; game stuff
 
 W_2048GRID EQU $C800 ; MUST be aligned to 00

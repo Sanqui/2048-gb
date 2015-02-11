@@ -5,7 +5,6 @@ INCLUDE "constants.asm"
 SECTION "rst00",HOME[0]
     im 1
     jp StartSMS
-    ret
 
 SECTION "rst08",HOME[8]
     ret
@@ -26,7 +25,9 @@ SECTION "smsint",HOME[$38]
     jp VBlankSMS
 
 SECTION "vblank",HOME[$40]
+IF !DEF(_Z80)
 	jp VBlankHandler
+ENDC
 SECTION "lcdc",HOME[$48]
 	reti
 SECTION "timer",HOME[$50]
@@ -41,8 +42,10 @@ SECTION "smspause",HOME[$66]
 SECTION "bank0",HOME[$68]
 
 SECTION "romheader",HOME[$100]
+IF !DEF(_Z80)
     nop
     stop
+ENDC
 
 Section "start",HOME[$150]
 
@@ -329,7 +332,7 @@ ReadJoypadSMS:
     
 
 ; gb:
-
+IF !DEF(_Z80)
 VBlankHandler:
     push af
     push bc
@@ -426,6 +429,7 @@ endr
     ld a, [hl]
     ld [de], a
     ret
+ENDC
 
 DisableLCD: ; $0061
 	ld a, 1
@@ -567,66 +571,68 @@ ClearTilemap:
     jr nz, .loop
     ret
 
-; a standard function:
-; this function directly reads the joypad I/O register
-; it reads many times in order to give the joypad a chance to stabilize
-; it saves a result in [H_JOY] in the following format
-; (set bit indicates pressed button)
-; bit 0 - A button
-; bit 1 - B button
-; bit 2 - Select button
-; bit 3 - Start button
-; bit 4 - Right
-; bit 5 - Left
-; bit 6 - Up
-; bit 7 - Down
-ReadJoypadRegister: ; 15F
-    ld a, [H_JOY]
-    ld [H_JOYOLD], a
-	ld a,%00100000 ; select direction keys
-	ld c,$00
-	ld [rJOYP],a
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	cpl ; complement the result so that a set bit indicates a pressed key
-	and a,%00001111
-	swap a ; put direction keys in upper nibble
-	ld b,a
-	ld a,%00010000 ; select button keys
-	ld [rJOYP],a
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	ld a,[rJOYP]
-	cpl ; complement the result so that a set bit indicates a pressed key
-	and a,%00001111
-	or b ; put button keys in lower nibble
-	ld [$fff8],a ; save joypad state
-	ld a,%00110000 ; unselect all keys
-	ld [rJOYP],a
+IF !DEF(_Z80)
+    ; a standard function:
+    ; this function directly reads the joypad I/O register
+    ; it reads many times in order to give the joypad a chance to stabilize
+    ; it saves a result in [H_JOY] in the following format
+    ; (set bit indicates pressed button)
+    ; bit 0 - A button
+    ; bit 1 - B button
+    ; bit 2 - Select button
+    ; bit 3 - Start button
+    ; bit 4 - Right
+    ; bit 5 - Left
+    ; bit 6 - Up
+    ; bit 7 - Down
+    ReadJoypadRegister: ; 15F
+        ld a, [H_JOY]
+        ld [H_JOYOLD], a
+	    ld a,%00100000 ; select direction keys
+	    ld c,$00
+	    ld [rJOYP],a
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    cpl ; complement the result so that a set bit indicates a pressed key
+	    and a,%00001111
+	    swap a ; put direction keys in upper nibble
+	    ld b,a
+	    ld a,%00010000 ; select button keys
+	    ld [rJOYP],a
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    ld a,[rJOYP]
+	    cpl ; complement the result so that a set bit indicates a pressed key
+	    and a,%00001111
+	    or b ; put button keys in lower nibble
+	    ld [$fff8],a ; save joypad state
+	    ld a,%00110000 ; unselect all keys
+	    ld [rJOYP],a
 	
-	ld a, [H_JOY]
-	ld b, a
-	ld a, [H_JOYOLD]
-	xor $ff
-	and b
-	ld [H_JOYNEW], a
+	    ld a, [H_JOY]
+	    ld b, a
+	    ld a, [H_JOYOLD]
+	    xor $ff
+	    and b
+	    ld [H_JOYNEW], a
 	
-	ld a, [H_JOY]
-	cp %00001111
-	ret nz
+	    ld a, [H_JOY]
+	    cp %00001111
+	    ret nz
 	
-	ret
+	    ret
+ENDC
 
 GetRNG:
     ld a, r
